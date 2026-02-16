@@ -8,7 +8,6 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-/* [Keep all existing CSS from previous version] */
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f0f; color: #f0f0f0; margin: 0; padding: 0; min-height: 100vh; display: flex; flex-direction: column; }
 .header { background: #1a1a1a; box-shadow: 0 2px 10px rgba(0,0,0,0.5); padding: 1rem 2rem; text-align: center; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
 .header h1 { font-weight: 600; color: #e0e0e0; margin: 0; font-size: 1.6rem; cursor: pointer; flex: 1; text-align: center; }
@@ -111,10 +110,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f0f; colo
             <div class="mb-2"><label class="form-label">Title</label><input type="text" id="newTitle" class="form-control" required></div>
             <div class="mb-2"><label class="form-label">Type</label>
                 <select id="newType" class="form-select" required>
-                    <option value="youtube">YouTube</option>
-                    <option value="drive">Google Drive</option>
-                    <option value="pdf">PDF</option>
-                    <option value="youtube-playlist">YouTube Playlist</option>
+                    <option value="youtube">YouTube</option><option value="drive">Google Drive</option><option value="pdf">PDF</option><option value="youtube-playlist">YouTube Playlist</option>
                 </select>
             </div>
             <div class="mb-2"><label class="form-label">ID / URL</label><input type="text" id="newId" class="form-control" placeholder="Drive ID or YouTube URL" required><small class="text-muted" style="font-size:0.75rem">For YouTube, paste full URL. For Drive, paste File ID.</small></div>
@@ -131,7 +127,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f0f; colo
     </div>
 </div>
 
-<!-- Auth Modal (Login ONLY) -->
+<!-- Auth Modal -->
 <div id="authModal">
     <div class="modal-content">
         <h5 class="mb-3" id="authTitle"><i class="fas fa-sign-in-alt me-2"></i>Admin Login</h5>
@@ -143,12 +139,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f0f; colo
                 <button type="button" id="cancelAuth" class="btn btn-secondary btn-sm">Cancel</button>
                 <button type="submit" class="btn btn-primary btn-sm" id="authSubmitBtn">Login</button>
             </div>
-            <!-- Sign Up Link Removed -->
         </form>
     </div>
 </div>
 
-<!-- Firebase SDKs -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -156,7 +150,7 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
-     apiKey: "AIzaSyB82MwSrGp35eS2ZXBsBlhie6EL6s-5HK0",
+    apiKey: "AIzaSyB82MwSrGp35eS2ZXBsBlhie6EL6s-5HK0",
   authDomain: "videolibrary-4709d.firebaseapp.com",
   projectId: "videolibrary-4709d",
   storageBucket: "videolibrary-4709d.firebasestorage.app",
@@ -239,12 +233,14 @@ if (auth) {
     });
 }
 
-// Data Sync
+// Data Sync from Firebase
 if (db) {
     const q = query(collection(db, "videos"), orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
         allVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`Loaded ${allVideos.length} videos from Firebase`);
         updateDataLists();
+        populateFilters();
         applyFilters(); 
     }, (error) => {
         console.error("Error fetching videos:", error);
@@ -282,6 +278,8 @@ function getEmbedUrl(item) {
     }
     return null;
 }
+
+// Update datalists for admin form
 function updateDataLists() {
     const cats = [...new Set(allVideos.map(v => v.category).filter(Boolean))].sort();
     const subs = [...new Set(allVideos.map(v => v.subcategory).filter(Boolean))].sort();
@@ -290,43 +288,104 @@ function updateDataLists() {
     subcategoryList.innerHTML = subs.map(s => `<option value="${s}">`).join('');
     topicList.innerHTML = tops.map(t => `<option value="${t}">`).join('');
 }
+
+// ✅ FIXED: Populate category filter dropdown
 function populateFilters() {
-    const cats = [...new Set(allVideos.map(v => v.category || "Uncategorized"))].sort();
+    const cats = [...new Set(allVideos.map(v => (v.category || "Uncategorized").trim()))].sort();
+    
+    const currentValue = categoryFilter.value;
     categoryFilter.innerHTML = '<option value="">All Categories</option>';
+    
     cats.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat;
-        opt.textContent = cat;
-        categoryFilter.appendChild(opt);
+        if (cat && cat.trim()) {
+            const opt = document.createElement('option');
+            opt.value = cat.trim();
+            opt.textContent = cat.trim();
+            categoryFilter.appendChild(opt);
+        }
     });
+    
+    // Restore selection if still valid
+    if (currentValue && cats.includes(currentValue)) {
+        categoryFilter.value = currentValue;
+    }
+    
     updateSubcategories();
 }
+
+// ✅ FIXED: Update subcategories based on selected category
 function updateSubcategories() {
-    const cat = categoryFilter.value;
+    const cat = categoryFilter.value.trim();
+    const currentSubValue = subcategoryFilter.value;
+    
     subcategoryFilter.innerHTML = '<option value="">All Subcategories</option>';
     topicFilter.innerHTML = '<option value="">All Topics</option>';
-    if (!cat) return;
-    const subs = [...new Set(allVideos.filter(v => (v.category || "Uncategorized") === cat).map(v => v.subcategory).filter(Boolean))].sort();
+    
+    if (!cat) {
+        subcategoryFilter.value = '';
+        topicFilter.value = '';
+        return;
+    }
+    
+    const subs = [...new Set(
+        allVideos
+            .filter(v => (v.category || "Uncategorized").trim() === cat)
+            .map(v => (v.subcategory || "").trim())
+            .filter(Boolean)
+    )].sort();
+    
     subs.forEach(sub => {
         const opt = document.createElement('option');
         opt.value = sub;
         opt.textContent = sub;
         subcategoryFilter.appendChild(opt);
     });
+    
+    // Restore selection if still valid
+    if (currentSubValue && subs.includes(currentSubValue)) {
+        subcategoryFilter.value = currentSubValue;
+    } else {
+        subcategoryFilter.value = '';
+    }
+    
+    updateTopics();
 }
+
+// ✅ FIXED: Update topics based on selected category and subcategory
 function updateTopics() {
-    const cat = categoryFilter.value;
-    const sub = subcategoryFilter.value;
+    const cat = categoryFilter.value.trim();
+    const sub = subcategoryFilter.value.trim();
+    const currentTopicValue = topicFilter.value;
+    
     topicFilter.innerHTML = '<option value="">All Topics</option>';
-    if (!cat || !sub) return;
-    const topics = [...new Set(allVideos.filter(v => (v.category || "Uncategorized") === cat && v.subcategory === sub).map(v => v.topic).filter(Boolean))].sort();
+    
+    if (!cat || !sub) {
+        topicFilter.value = '';
+        return;
+    }
+    
+    const topics = [...new Set(
+        allVideos
+            .filter(v => (v.category || "Uncategorized").trim() === cat && (v.subcategory || "").trim() === sub)
+            .map(v => (v.topic || "").trim())
+            .filter(Boolean)
+    )].sort();
+    
     topics.forEach(top => {
         const opt = document.createElement('option');
         opt.value = top;
         opt.textContent = top;
         topicFilter.appendChild(opt);
     });
+    
+    // Restore selection if still valid
+    if (currentTopicValue && topics.includes(currentTopicValue)) {
+        topicFilter.value = currentTopicValue;
+    } else {
+        topicFilter.value = '';
+    }
 }
+
 function createVideoCard(video) {
     const card = document.createElement('div');
     card.className = 'video-card';
@@ -370,26 +429,33 @@ function createVideoCard(video) {
     card.addEventListener('click', () => openVideo(video));
     return card;
 }
+
 function applyFilters() {
     let list = [...allVideos];
-    const cat = categoryFilter.value;
-    const sub = subcategoryFilter.value;
-    const top = topicFilter.value;
+    const cat = categoryFilter.value.trim();
+    const sub = subcategoryFilter.value.trim();
+    const top = topicFilter.value.trim();
     const query = searchBox.value.trim().toLowerCase();
-    if (cat) list = list.filter(v => (v.category || "Uncategorized") === cat);
-    if (sub) list = list.filter(v => v.subcategory === sub);
-    if (top) list = list.filter(v => v.topic === top);
+    
+    if (cat) list = list.filter(v => (v.category || "Uncategorized").trim() === cat);
+    if (sub) list = list.filter(v => (v.subcategory || "").trim() === sub);
+    if (top) list = list.filter(v => (v.topic || "").trim() === top);
     if (query) {
-        list = list.filter(v => v.title.toLowerCase().includes(query) || (v.category && v.category.toLowerCase().includes(query)) || (v.subcategory && v.subcategory.toLowerCase().includes(query)) || (v.topic && v.topic.toLowerCase().includes(query)));
+        list = list.filter(v => 
+            v.title.toLowerCase().includes(query) || 
+            (v.category && v.category.toLowerCase().includes(query)) || 
+            (v.subcategory && v.subcategory.toLowerCase().includes(query)) || 
+            (v.topic && v.topic.toLowerCase().includes(query))
+        );
     }
     filteredVideos = list;
     currentPage = 1;
     renderVideos();
-    populateFilters();
 }
+
 function renderVideos() {
     if (!allVideos.length) {
-        videoGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#666;">No videos found.</div>`;
+        videoGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#666;">No videos found in database.</div>`;
         paginationEl.innerHTML = '';
         return;
     }
@@ -406,6 +472,7 @@ function renderVideos() {
     }
     renderPagination(totalPages);
 }
+
 function renderPagination(totalPages) {
     paginationEl.innerHTML = '';
     if (totalPages <= 1) return;
@@ -431,6 +498,7 @@ function renderPagination(totalPages) {
     next.onclick = () => { if (currentPage < totalPages) { currentPage++; renderVideos(); } };
     paginationEl.appendChild(next);
 }
+
 function openVideo(video) {
     if (video.protected) {
         currentVideo = video;
@@ -458,7 +526,8 @@ function validatePassword() {
         setTimeout(() => passwordError.style.display = 'none', 2000);
     }
 }
-// Auth Logic (Login Only)
+
+// Auth Logic
 function openAuthModal() {
     authModal.style.display = 'flex';
     authError.style.display = 'none';
@@ -475,9 +544,7 @@ function handleAuth(e) {
     authSubmitBtn.disabled = true;
     authSubmitBtn.textContent = 'Logging in...';
     signInWithEmailAndPassword(auth, email, password)
-        .then((userCredential) => {
-            authModal.style.display = 'none';
-        })
+        .then((userCredential) => { authModal.style.display = 'none'; })
         .catch((error) => {
             authError.textContent = "Error: " + error.message;
             authError.style.display = 'block';
@@ -488,7 +555,8 @@ function handleAuth(e) {
 function handleLogout() {
     signOut(auth).then(() => { console.log("Logged out"); }).catch((error) => { console.error(error); });
 }
-// Admin
+
+// Admin Actions
 adminBtn.addEventListener('click', () => {
     if (currentUser) {
         addVideoModal.style.display = 'flex';
@@ -527,6 +595,7 @@ addVideoForm.addEventListener('submit', async (e) => {
         addVideoForm.reset();
         setTimeout(() => { addVideoModal.style.display = 'none'; addVideoStatus.textContent = ""; }, 1500);
     } catch (error) {
+        console.error("Error adding document: ", error);
         addVideoStatus.textContent = "Error: " + error.message;
         addVideoStatus.className = "status-error";
     } finally {
@@ -534,15 +603,39 @@ addVideoForm.addEventListener('submit', async (e) => {
         btn.textContent = originalText;
     }
 });
+
 // Event Listeners
 authBtn.addEventListener('click', () => { if (currentUser) { handleLogout(); } else { openAuthModal(); } });
 authForm.addEventListener('submit', handleAuth);
 cancelAuth.addEventListener('click', () => { authModal.style.display = 'none'; });
-categoryFilter.addEventListener('change', () => { currentPage = 1; updateSubcategories(); updateTopics(); applyFilters(); });
-subcategoryFilter.addEventListener('change', () => { currentPage = 1; updateTopics(); applyFilters(); });
-topicFilter.addEventListener('change', () => { currentPage = 1; applyFilters(); });
-searchBox.addEventListener('input', () => { currentPage = 1; applyFilters(); });
-headerTitle.addEventListener('click', () => { categoryFilter.value = ''; subcategoryFilter.value = ''; topicFilter.value = ''; searchBox.value = ''; currentPage = 1; updateSubcategories(); updateTopics(); applyFilters(); popupModal.style.display = 'none'; popupFrame.src = ''; });
+
+// ✅ FIXED: Filter event listeners with proper trim and refresh
+categoryFilter.addEventListener('change', () => {
+    updateSubcategories();
+    updateTopics();
+    applyFilters();
+});
+subcategoryFilter.addEventListener('change', () => {
+    updateTopics();
+    applyFilters();
+});
+topicFilter.addEventListener('change', () => {
+    applyFilters();
+});
+searchBox.addEventListener('input', () => {
+    applyFilters();
+});
+headerTitle.addEventListener('click', () => { 
+    categoryFilter.value = ''; 
+    subcategoryFilter.value = ''; 
+    topicFilter.value = ''; 
+    searchBox.value = ''; 
+    updateSubcategories(); 
+    updateTopics(); 
+    applyFilters(); 
+    popupModal.style.display = 'none'; 
+    popupFrame.src = ''; 
+});
 closePopup.addEventListener('click', () => { popupModal.style.display = 'none'; popupFrame.src = ''; });
 backToListBtn.addEventListener('click', () => { popupModal.style.display = 'none'; popupFrame.src = ''; });
 document.addEventListener('keydown', (e) => {
